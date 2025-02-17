@@ -4,3 +4,4 @@ requests
 quart
 fastapi
 uvicorn
+aiohttp
