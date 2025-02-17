@@ -1,0 +1,34 @@
+{
+    "7502333334": {
+        "name": "Dev Fluxx",
+        "trades": 1,
+        "positive": 1,
+        "negative": 0,
+        "p2p_trades": 0,
+        "bs_trades": 1,
+        "link": "tg://user?id=7502333334",
+        "reviewers": {
+            "5991907369": {
+                "name": "DEV",
+                "positive": 1,
+                "negative": 0
+            }
+        }
+    },
+    "7224252449": {
+        "name": "........",
+        "trades": 1,
+        "positive": 0,
+        "negative": 1,
+        "p2p_trades": 0,
+        "bs_trades": 1,
+        "link": "tg://user?id=7224252449",
+        "reviewers": {
+            "5991907369": {
+                "name": "DEV",
+                "positive": 0,
+                "negative": 1
+            }
+        }
+    }
+}

@@ -1,0 +1,49 @@
+
+[2025-01-15 18:46:37] Trade #ORDER-575764EE2B95
+├── Amount: $1.00
+├── Buyer ID: 7502333334
+├── Seller ID: 5991907369
+└── Status: SUCCESSFUL
+
+[2025-01-15 20:50:20] Trade #ORDER-7721B233B28D
+├── Amount: $1.00
+├── Buyer ID: 7502333334
+├── Seller ID: 5991907369
+└── Status: SUCCESSFUL
+
+[2025-01-16 17:02:29] Trade #ORDER-42D4C50AC3F7
+├── Amount: $12.00
+├── Buyer ID: 5991907369
+├── Seller ID: 7502333334
+└── Status: SUCCESSFUL
+
+[2025-01-16 17:14:41] Trade #ORDER-87D5C2AD0905
+├── Amount: $1.00
+├── Buyer ID: 5991907369
+├── Seller ID: 7502333334
+└── Status: SUCCESSFUL
+
+[2025-01-16 17:34:02] Trade #ORDER-A582308B4E93
+├── Amount: $2.00
+├── Buyer ID: 5991907369
+├── Seller ID: 7502333334
+└── Status: SUCCESSFUL
+
+[2025-01-16 17:41:51] Trade #ORDER-1E329119BC3D
+├── Amount: $2.00
+├── Buyer ID: 5991907369
+├── Seller ID: 7502333334
+└── Status: SUCCESSFUL
+
+[2025-01-17 16:41:59] Trade #ORDER-D833FB23B767
+├── Amount: $1.00
+├── Buyer ID: 5991907369
+├── Seller ID: 7502333334
+└── Status: SUCCESSFUL
+
+[2025-01-17 16:56:26] Trade #ORDER-4A386A98A5FC
+├── Amount: $1.00
+├── Buyer ID: 5991907369
+├── Seller ID: 7224252449
+└── Status: SUCCESSFUL
+
