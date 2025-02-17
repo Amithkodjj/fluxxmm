@@ -228,7 +228,7 @@ async def handle_confirm_withdrawal(update: Update, context: ContextTypes.DEFAUL
     payout_result = await create_payout(**payout_request)
     print(f"Payout Result: {payout_result}")
     
-    if payout_result.get('result') == 130:
+    if payout_result.get('result') == 100:
         seller = await context.bot.get_chat(deal_data['seller'])
         keyboard = [[InlineKeyboardButton(f"🟢 Confirm your Payment {seller.first_name}", callback_data="seller_confirm_paid")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
