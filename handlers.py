@@ -856,11 +856,20 @@ async def handle_killdeal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if deal_data.get('buyer'):
                 buyer = await context.bot.get_chat(deal_data['buyer'])
                 notification_text += f"Buyer: {buyer.first_name}\n"
+                context.user_data.clear()
+                context.user_data["state"] = None
+                context.user_data.pop('buyer', None)
+                
                 
             if deal_data.get('seller'):
                 seller = await context.bot.get_chat(deal_data['seller'])
                 notification_text += f"Seller: {seller.first_name}\n"
+                context.user_data.clear()
+                context.user_data["state"] = None
+                context.user_data.pop('seller', None)
                 
+
+
             if deal_data.get('amount'):
                 notification_text += f"Amount: ${deal_data['amount']:.2f}\n"
                 
@@ -889,11 +898,23 @@ async def handle_killall(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     active_deals = get_all_active_deals()
-    for deal_id in active_deals:
+    for deal_id, deal_data in active_deals.items():
+        
+        if 'buyer' in deal_data:
+            context.user_data.clear()
+            context.user_data["state"] = None
+            context.user_data.pop('buyer', None)
+            
+       
+        if 'seller' in deal_data:
+            context.user_data.clear()
+            context.user_data["state"] = None
+            context.user_data.pop('seller', None)
+            
         remove_active_deal(deal_id)
     
-    await update.message.reply_text("✅ All active deals have been terminated.")
-    
+    await update.message.reply_text("✅ All active deals have been terminated and user contexts cleared.")
+
 async def send_withdrawal_update_to_seller(bot, seller_id, status, amount, currency):
     
     
