@@ -14,6 +14,7 @@ from utils import get_active_deal, update_active_deal, remove_active_deal
 from datetime import datetime, timedelta
 import httpx
 import time
+from fastapi.responses import PlainTextResponse
 
 app = FastAPI()
 
@@ -60,7 +61,7 @@ async def startup_event():
 async def home():
     return {"message": "Welcome to the FastAPI App!"}
 
-@app.get("/ping")
+@app.get("/ping", response_class=PlainTextResponse)
 async def ping():
     start_time = time.time()
     async with httpx.AsyncClient() as client:
@@ -68,7 +69,6 @@ async def ping():
     end_time = time.time()
     response_time = round((end_time - start_time) * 1000)
     return f"PONG {response_time}ms"
-
 @app.get("/webhook")
 async def webhook():
     return {"message": "Webhook is working!"}
