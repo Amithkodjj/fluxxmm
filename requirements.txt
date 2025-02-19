@@ -5,3 +5,4 @@ quart
 fastapi
 uvicorn
 aiohttp
+httpx
