@@ -9,6 +9,7 @@ from datetime import datetime
 from refund import *
 from datetime import datetime,  timedelta
 from telegram.error import BadRequest
+from login import *
 def load_fees():
     with open('config.json', 'r') as f:
         config = json.load(f)
@@ -30,7 +31,19 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome_text = (
         "𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝘁𝗵𝗲 𝗠𝗶𝗱𝗱𝗹𝗲𝗺𝗮𝗻 𝗕𝗼𝘁! 🤝\n"
-        "𝗪𝗲 𝗵𝗲𝗹𝗽 𝗽𝗲𝗼𝗽𝗹𝗲 𝗯𝘂𝘆 𝗮𝗻𝗱 𝘀𝗲𝗹𝗹 𝘁𝗵𝗶𝗻𝗴𝘀 𝘀𝗮𝗳𝗲𝗹𝘆."
+        "𝗪𝗲 𝗵𝗲𝗹𝗽 𝗽𝗲𝗼𝗽𝗹𝗲 𝗯𝘂𝘆 𝗮𝗻𝗱 𝘀𝗲𝗹𝗹 𝘁𝗵𝗶𝗻𝗴𝘀 𝘀𝗮𝗳𝗲𝗹𝘆.\n\n"
+        "📝 Quick Deal Setup:\n"
+        "Use the /form command in any group to quickly create a deal!\n\n"
+        "How to use /form:\n"
+        "1. Add bot to your group\n" 
+        "2. Type /form\n"
+        "3. Fill details as shown:\n"
+        "   <code>Buyer: @username\n"
+        "   Seller: @username\n" 
+        "   Deal: What you're trading\n"
+        "   Price: $amount\n\n</code>"
+        "4. Click The Text To Copy Deal Form 👆\n\n"
+        "Both buyer and seller must be in the group! 🎯"
     )
 
     if update.callback_query:
@@ -45,6 +58,207 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
+
+
+async def handle_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type not in ['group', 'supergroup']:
+        await update.message.reply_text("This command can only be used in a group.")
+        return
+        
+    context.user_data['awaiting_form'] = True
+    await update.message.reply_text(
+        "Please enter deal details in this format:\n\n"
+        "Buyer: @username\n"
+        "Seller: @username\n"
+        "Deal: What you're dealing\n"
+        "Price: $amount\n\n"
+        "```Example:\n\n"
+        "Buyer: @buyer\n"
+        "Seller: @seller\n"
+        "Deal: Selling ps4\n"
+        "Price: $2000```\n\n"
+        '⚠ Your form data must be exactly how the instruction is given ⚠'
+        '⚠ State price in dollar and ensure you include the $ sign ⚠',
+        parse_mode="Markdown"
+    )
+
+
+from telethon import TelegramClient
+import os
+
+async def check_admin_session():
+    if not os.path.exists('admin_session.session'):
+        return False
+    
+    client = TelegramClient('admin_session', API_ID, API_HASH)
+    try:
+        await client.connect()
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return False
+        await client.disconnect()
+        return True
+    except:
+        return False
+
+async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data.get('awaiting_form'):
+        print(">>> Not awaiting form, returning early")
+        return
+        
+    text = update.message.text
+    lines = text.split('\n')
+    form_data = {}
+    entities = update.message.entities
+    
+    print(f">>> Starting form processing with {len(lines)} lines")
+    print(f">>> Raw text: {text}")
+    print(f">>> Entities found: {entities}")
+    
+    try:
+        for line in lines:
+            print(f">>> Processing line: {line}")
+            
+            if line.startswith('Buyer:'):
+                print(">>> Processing buyer...")
+                if not await check_admin_session():
+                    print(">>> Admin session check failed")
+                    await update.message.reply_text("Admin needs to login ⚠")
+                    return
+                    
+                client = TelegramClient('admin_session', API_ID, API_HASH)
+                await client.connect()
+                buyer_found = False
+                
+                for entity in entities:
+                    if entity.type in ['text_mention', 'mention']:
+                        entity_text = text[entity.offset:entity.offset + entity.length]
+                        print(f">>> Found buyer entity: {entity_text}")
+                        print(f">>> Entity offset: {entity.offset}, length: {entity.length}")
+                        print(f">>> Checking if {entity_text} is in {line}")
+                        
+                        if entity_text in line:
+                            try:
+                                print(f">>> Attempting to get entity for {entity_text}")
+                                user = await client.get_entity(entity_text)
+                                form_data['buyer_id'] = user.id
+                                form_data['buyer_name'] = user.first_name
+                                print(f">>> Successfully resolved buyer: {form_data['buyer_name']} (ID: {form_data['buyer_id']})")
+                                buyer_found = True
+                            except Exception as e:
+                                print(f">>> Error resolving buyer entity: {e}")
+                                await client.disconnect()
+                                await update.message.reply_text("Admin needs to login ⚠")
+                                return
+                
+                if not buyer_found:
+                    print(">>> No buyer entity was matched in the line")
+                await client.disconnect()
+
+            elif line.startswith('Seller:'):
+                print(">>> Processing seller...")
+                if not await check_admin_session():
+                    print(">>> Admin session check failed")
+                    await update.message.reply_text("Admin needs to login ⚠")
+                    return
+                    
+                client = TelegramClient('admin_session', API_ID, API_HASH)
+                await client.connect()
+                seller_found = False
+                
+                for entity in entities:
+                    if entity.type in ['text_mention', 'mention']:
+                        entity_text = text[entity.offset:entity.offset + entity.length]
+                        print(f">>> Found seller entity: {entity_text}")
+                        print(f">>> Entity offset: {entity.offset}, length: {entity.length}")
+                        print(f">>> Checking if {entity_text} is in {line}")
+                        
+                        if entity_text in line:
+                            try:
+                                print(f">>> Attempting to get entity for {entity_text}")
+                                user = await client.get_entity(entity_text)
+                                form_data['seller_id'] = user.id
+                                form_data['seller_name'] = user.first_name
+                                print(f">>> Successfully resolved seller: {form_data['seller_name']} (ID: {form_data['seller_id']})")
+                                seller_found = True
+                            except Exception as e:
+                                print(f">>> Error resolving seller entity: {e}")
+                                await client.disconnect()
+                                await update.message.reply_text("Admin needs to login ⚠")
+                                return
+                
+                if not seller_found:
+                    print(">>> No seller entity was matched in the line")
+                await client.disconnect()
+
+            elif line.startswith('Deal:'):
+                deal_type = line.split('Deal:')[1].strip()
+                form_data['deal_type'] = deal_type
+                print(f">>> Added deal_type: {deal_type}")
+                
+            elif line.startswith('Price:'):
+                try:
+                    amount = float(line.split('$')[1].strip())
+                    form_data['amount'] = amount
+                    print(f">>> Added amount: {amount}")
+                except Exception as e:
+                    print(f">>> Error parsing price: {e}")
+        
+        print(f">>> Form data collected: {form_data}")
+        required_fields = ['buyer_id', 'buyer_name', 'seller_id', 'seller_name', 'deal_type', 'amount']
+        missing_fields = [field for field in required_fields if field not in form_data]
+        
+        print(f">>> Required fields: {required_fields}")
+        print(f">>> Missing fields: {missing_fields}")
+        
+        if missing_fields:
+            await update.message.reply_text(f"Error processing form: Missing required fields: {', '.join(missing_fields)}")
+            return
+            
+        deal_id = generate_deal_id(form_data['buyer_id'], None, update.effective_chat.id)
+        print(f">>> Generated deal_id: {deal_id}")
+        
+        deal_data = {
+            "status": "initiated",
+            "starter": update.effective_user.id,
+            "group_id": update.effective_chat.id,
+            "buyer": form_data['buyer_id'],
+            "seller": form_data['seller_id'],
+            "amount": form_data['amount'],
+            "deal_type": form_data['deal_type'],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        print(f">>> Deal data prepared: {deal_data}")
+        save_active_deal(deal_id, deal_data)
+        
+        keyboard = [
+            [InlineKeyboardButton("Click Confirm ✅", callback_data=f"confirm_form_{deal_id}")],
+            [InlineKeyboardButton("End Deal ❌", callback_data=f"back")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"<b>𝗙𝗟𝗨𝗫𝗫 𝗘𝗦𝗖𝗥𝗢𝗪 𝗦𝗘𝗥𝗩𝗜𝗖𝗘</b>\n\n"
+            f"👤 Buyer: <a href='tg://user?id={form_data['buyer_id']}'>{form_data['buyer_name']}</a>\n"
+            f"👥 Seller: <a href='tg://user?id={form_data['seller_id']}'>{form_data['seller_name']}</a>\n"
+            f"🔵 Deal: {form_data['deal_type']}\n"
+            f"💰 Amount: ${form_data['amount']:.2f}\n\n"
+            f"<i>Both buyer and seller must confirm to proceed</i>",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+        
+        context.user_data['awaiting_form'] = False
+        print(">>> Form processing completed successfully")
+        
+    except Exception as e:
+        print(f">>> CRITICAL ERROR processing form: {str(e)}")
+        print(f">>> Exception type: {type(e)}")
+        import traceback
+        print(f">>> Traceback: {traceback.format_exc()}")
+        await update.message.reply_text("Invalid form format or user not found. Please try again.")
+        context.user_data['awaiting_form'] = False
 
 async def handle_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -338,6 +552,61 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("coin_"):
         await handle_coin_selection(update, context)
 
+    elif query.data.startswith("confirm_form_"):
+        deal_id = query.data.split("_")[2]
+        deal_data = get_active_deal(deal_id)
+        
+        if not deal_data:
+            await query.answer("Deal not found", show_alert=True)
+            return
+            
+        if query.from_user.id not in [deal_data['buyer'], deal_data['seller']]:
+            await query.answer("Only buyer and seller can confirm", show_alert=True)
+            return
+            
+        if 'confirmations' not in deal_data:
+            deal_data['confirmations'] = []
+            
+        if query.from_user.id in deal_data['confirmations']:
+            await query.answer("You've already confirmed", show_alert=True)
+            return
+            
+        deal_data['confirmations'].append(query.from_user.id)
+        update_active_deal(deal_id, {'confirmations': deal_data['confirmations']})
+
+        other_user_id = deal_data['seller'] if query.from_user.id == deal_data['buyer'] else deal_data['buyer']
+        await query.message.reply_text(
+            f"<a href='tg://user?id={other_user_id}'>{other_user_id}</a> click donfirm to proceed with the deal ",
+            parse_mode='HTML'
+        )
+        
+        if len(deal_data['confirmations']) == 2:
+            # Both confirmed, proceed to deposit
+            invoice = await create_invoice(deal_data['amount'], deal_id)
+            if invoice.get("message") == "success" and invoice.get("result") == 100:
+                payment_url = invoice["payLink"]
+                track_id = invoice["trackId"]
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔗 Pay Now", url=payment_url)],
+                    [InlineKeyboardButton("❌ End Deal", callback_data="back")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    f"<b>𝗙𝗟𝗨𝗫𝗫 𝗘𝗦𝗖𝗥𝗢𝗪 𝗦𝗘𝗥𝗩𝗜𝗖𝗘</b>\n\n"
+                    f"Please complete your payment of ${deal_data['amount']:.2f}\n\n"
+                    f"Use the Payment Link Below 👇\n"
+                    f"Track ID: <code>{track_id}</code>\n"
+                    "<code>⚠ Do Not Reuse This Link</code>\n"
+                    "<code>⚠ Buyer must pay exact amount as seen in Link</code>",
+                    reply_markup=reply_markup,
+                    parse_mode='HTML'
+                )
+        else:
+            await query.answer("Confirmation received, waiting for other party", show_alert=True)
+
+
     elif query.data == "seller_confirm_paid":
         await handle_seller_confirm(update, context)
     elif query.data == "confirm_withdrawal":
@@ -503,6 +772,8 @@ def get_remaining_time(payment_time):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("state") == "AMOUNT":
+        if not update.message.reply_to_message or update.message.reply_to_message.message_id != context.user_data.get("prompt_message_id"):
+            return
         try:
             prompt_message_id = context.user_data.get("prompt_message_id")
             if prompt_message_id:
@@ -581,6 +852,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_complaint(update, context)
     elif context.user_data.get("state") == "AWAITING_MEMO":
         await handle_memo_input(update, context)
+    elif context.user_data.get('awaiting_code'):
+        await handle_code(update, context)
+    elif context.user_data.get('awaiting_password'):
+        await handle_2fa_password(update, context)
+    else:
+        await process_form(update, context)
 
 
 async def handle_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):

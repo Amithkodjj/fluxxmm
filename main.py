@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 import httpx
 import time
 from fastapi.responses import PlainTextResponse
+from login import *
 
 app = FastAPI()
 
@@ -42,11 +43,16 @@ async def run_bot():
     application.add_handler(CommandHandler("setsticker", handle_setsticker))
     application.add_handler(CommandHandler("getdeal", handle_getdeal))
     application.add_handler(CommandHandler("refund", handle_refund))
+    application.add_handler(CommandHandler("form", handle_form))
+    application.add_handler(CommandHandler("login", handle_login))
+    
+
 
     application.add_handler(CallbackQueryHandler(handle_refund_agreement, pattern="^refund_(agree|deny)$"))
     application.add_handler(CallbackQueryHandler(handle_callback))  
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_form))
     application.add_error_handler(error_handler)
 
     await application.initialize()
