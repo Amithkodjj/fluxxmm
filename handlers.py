@@ -13,12 +13,18 @@ from login import *
 def load_fees():
     with open('config.json', 'r') as f:
         config = json.load(f)
-    return config['p2p_fee'], config['bs_fee']
+    return config['p2p_fee'], config['bs_fee'], config['allfee']
 
 def calculate_fee(amount, deal_type):
-    p2p_fee, bs_fee = load_fees()
-    fee_percentage = p2p_fee if deal_type == "p2p" else bs_fee
+    p2p_fee, bs_fee, allfee = load_fees()
+    if deal_type == "p2p":
+        fee_percentage = p2p_fee
+    elif deal_type == "b_and_s":
+        fee_percentage = bs_fee
+    else:
+        fee_percentage = allfee
     return amount * (fee_percentage / 100)
+
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -1000,6 +1006,26 @@ async def handle_bsfee(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Fee must be between 1 and 40%")
     except (IndexError, ValueError):
         await update.message.reply_text("Please provide a valid fee percentage")
+
+async def handle_setfee(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if str(update.effective_user.id) != ADMIN_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+
+    try:
+        new_fee = float(context.args[0])
+        if 1 <= new_fee <= 40:
+            with open('config.json', 'r') as f:
+                config = json.load(f)
+            config['allfee'] = new_fee
+            with open('config.json', 'w') as f:
+                json.dump(config, f, indent=2)
+            await update.message.reply_text(f"General fee updated to {new_fee}%")
+        else:
+            await update.message.reply_text("Fee must be between 1 and 40%")
+    except (IndexError, ValueError):
+        await update.message.reply_text("Please provide a valid fee percentage")
+
 
 async def handle_trades(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for /trades command - sends the trades.txt file to admin"""

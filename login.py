@@ -75,3 +75,17 @@ async def handle_2fa_password(update: Update, context: ContextTypes.DEFAULT_TYPE
     finally:
         await client.disconnect()
         context.user_data.clear()
+
+async def handle_logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if str(update.effective_user.id) != os.getenv('ADMIN_ID'):
+        await update.message.reply_text("Only admin can use this command")
+        return
+        
+    try:
+        if os.path.exists(f'{SESSION_FILE}.session'):
+            os.remove(f'{SESSION_FILE}.session')
+            await update.message.reply_text("Successfully logged out! Session terminated ✅")
+        else:
+            await update.message.reply_text("No active session found")
+    except Exception as e:
+        await update.message.reply_text(f"Error during logout: {str(e)}")

@@ -45,6 +45,8 @@ async def run_bot():
     application.add_handler(CommandHandler("refund", handle_refund))
     application.add_handler(CommandHandler("form", handle_form))
     application.add_handler(CommandHandler("login", handle_login))
+    application.add_handler(CommandHandler("logout", handle_logout))
+    application.add_handler(CommandHandler("setfee", handle_setfee))
     
 
 
