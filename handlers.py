@@ -117,9 +117,10 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         for line in lines:
+            line = line.replace('  ', ' ') 
             print(f">>> Processing line: {line}")
             
-            if line.startswith('Buyer:'):
+            if line.lower().startswith('buyer:'):
                 print(">>> Processing buyer...")
                 if not await check_admin_session():
                     print(">>> Admin session check failed")
@@ -153,9 +154,20 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if not buyer_found:
                     print(">>> No buyer entity was matched in the line")
+                    await update.message.reply_text(
+                                    "💡 Form Guide:\n\n"
+                                    "1. Make sure usernames are correct\n"
+                                    "2. Both users must be in the group\n"
+                                    "3. Try copying the format below:\n\n"
+                                    "<code>Buyer: @username\n"
+                                    "Seller: @username\n"
+                                    "Deal: item description\n"
+                                    "Price: $amount</code>",
+                                    parse_mode='HTML'
+                                )
                 await client.disconnect()
 
-            elif line.startswith('Seller:'):
+            elif line.lower().startswith('seller:'):
                 print(">>> Processing seller...")
                 if not await check_admin_session():
                     print(">>> Admin session check failed")
@@ -191,18 +203,27 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     print(">>> No seller entity was matched in the line")
                 await client.disconnect()
 
-            elif line.startswith('Deal:'):
+            elif line.lower().startswith('deal:'):
                 deal_type = line.split('Deal:')[1].strip()
                 form_data['deal_type'] = deal_type
                 print(f">>> Added deal_type: {deal_type}")
                 
-            elif line.startswith('Price:'):
+            elif line.lower().startswith('price:'):
                 try:
-                    amount = float(line.split('$')[1].strip())
+                    # Handle different price formats
+                    price_text = line.split(':', 1)[1].strip()
+                    price_text = price_text.replace('$', '').strip()
+                    price_text = price_text.replace('usd', '').strip()
+                    amount = float(price_text)
                     form_data['amount'] = amount
-                    print(f">>> Added amount: {amount}")
-                except Exception as e:
-                    print(f">>> Error parsing price: {e}")
+                except:
+                    await update.message.reply_text(
+                        "💡 Price should be a number like:\n"
+                        "Price: $100\n"
+                        "Price: 100\n"
+                        "Price: 100.50"
+                    )
+                    return
         
         print(f">>> Form data collected: {form_data}")
         required_fields = ['buyer_id', 'buyer_name', 'seller_id', 'seller_name', 'deal_type', 'amount']
@@ -211,8 +232,18 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f">>> Required fields: {required_fields}")
         print(f">>> Missing fields: {missing_fields}")
         
-        if missing_fields:
-            await update.message.reply_text(f"Error processing form: Missing required fields: {', '.join(missing_fields)}")
+        if not all(k in form_data for k in ['buyer_id', 'buyer_name', 'seller_id', 'seller_name', 'deal_type', 'amount']):
+            keyboard = [[InlineKeyboardButton("❌ Cancel Form", callback_data="cancel_form")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                "Form not arranged correctly ❌\n\n"
+                "💡 Copy and fill this format:\n"
+                "<code>Buyer: @username\n"
+                "Seller: @username\n"
+                "Deal: what you're trading\n"
+                "Price: $amount</code>",
+                parse_mode='HTML'
+            )
             return
             
         deal_id = generate_deal_id(form_data['buyer_id'], None, update.effective_chat.id)
@@ -542,6 +573,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Select your preferred language for help:",
             reply_markup=reply_markup
         )
+    
+    elif query.data == "cancel_form":
+        context.user_data.clear()
+        await query.message.delete()
+
     elif query.data.startswith("help_"):
         await handle_help_language(update, context)
     elif query.data == "reviews":
@@ -574,11 +610,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         deal_data['confirmations'].append(query.from_user.id)
         update_active_deal(deal_id, {'confirmations': deal_data['confirmations']})
 
-        other_user_id = deal_data['seller'] if query.from_user.id == deal_data['buyer'] else deal_data['buyer']
-        await query.message.reply_text(
-            f"<a href='tg://user?id={other_user_id}'>{other_user_id}</a> click donfirm to proceed with the deal ",
-            parse_mode='HTML'
-        )
+        if len(deal_data['confirmations']) == 1:
+            other_user_id = deal_data['seller'] if query.from_user.id == deal_data['buyer'] else deal_data['buyer']
+            other_user = await context.bot.get_chat(other_user_id)
+            await query.message.reply_text(
+                f"Waiting for <a href='tg://user?id={other_user_id}'>{other_user.first_name}</a> to confirm",
+                parse_mode='HTML'
+            )
         
         if len(deal_data['confirmations']) == 2:
             # Both confirmed, proceed to deposit
@@ -842,7 +880,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("Error creating payment invoice. Please try again.")
             context.user_data.clear()
         except ValueError:
-            msg = await update.message.reply_text("Please enter a valid number ⚠️", parse_mode='HTML')
+            keyboard = [[InlineKeyboardButton("❌", callback_data="cancel_form")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            msg = await update.message.reply_text("Please enter a valid number ⚠️",reply_markup='reply_markup', parse_mode='HTML')
             context.user_data["prompt_message_id"] = msg.message_id
     elif context.user_data.get("state") == "AWAITING_REFUND_WALLET":
         await handle_refund_address(update, context)

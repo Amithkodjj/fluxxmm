@@ -1,15 +1,1 @@
-{
-    "7502333334None-1002462348636496c45cd": {
-        "status": "initiated",
-        "starter": 5991907369,
-        "group_id": -1002462348636,
-        "buyer": 7502333334,
-        "seller": 5991907369,
-        "amount": 5.0,
-        "deal_type": "my bicycle",
-        "timestamp": "2025-03-01T15:23:33.856979",
-        "confirmations": [
-            5991907369
-        ]
-    }
-}
+{}

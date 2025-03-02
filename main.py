@@ -102,14 +102,12 @@ async def oxapay_callback(request: Request, background_tasks: BackgroundTasks):
         if not deal_id:
             raise HTTPException(status_code=400, detail="Missing orderId")
 
-        group_id = deal_id.split("None")[-1][:14]  
-        raw_group_id = deal_id.split("None")[-1][:14]
-        group_id = f"-100{raw_group_id[2:]}" if raw_group_id.startswith('-4') else raw_group_id
-
         deal_data = get_active_deal(deal_id)
         if not deal_data:
             print(f"No active deal found for deal_id: {deal_id}")
             return {"message": "No active deal found"}
+        
+        group_id = deal_data['group_id']
 
         buyer = await bot.get_chat(deal_data['buyer'])
         seller = await bot.get_chat(deal_data['seller'])
