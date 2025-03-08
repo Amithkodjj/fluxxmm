@@ -70,7 +70,7 @@ async def startup_event():
 async def home():
     return {"message": "Welcome to the FastAPI App!"}
 
-@app.get("/ping", response_class=PlainTextResponse)
+@app.api_route("/ping", methods=["GET", "HEAD"], response_class=PlainTextResponse)
 async def ping():
     start_time = time.time()
     async with httpx.AsyncClient() as client:
@@ -78,9 +78,6 @@ async def ping():
     end_time = time.time()
     response_time = round((end_time - start_time) * 1000)
     return f"PONG {response_time}ms"
-@app.get("/webhook")
-async def webhook():
-    return {"message": "Webhook is working!"}
 
 @app.post("/oxapay_callback")
 async def oxapay_callback(request: Request, background_tasks: BackgroundTasks):
