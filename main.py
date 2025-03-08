@@ -47,7 +47,8 @@ async def run_bot():
     application.add_handler(CommandHandler("login", handle_login))
     application.add_handler(CommandHandler("logout", handle_logout))
     application.add_handler(CommandHandler("setfee", handle_setfee))
-    
+    application.add_handler(CommandHandler("create", handle_create))
+
 
 
     application.add_handler(CallbackQueryHandler(handle_refund_agreement, pattern="^refund_(agree|deny)$"))

@@ -1,7 +1,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import json
-from config import ADMIN_ID
+from config import *
 from utils import *
 from withdrawal import *
 from deposit import *
@@ -10,6 +10,9 @@ from refund import *
 from datetime import datetime,  timedelta
 from telegram.error import BadRequest
 from login import *
+from telethon.tl.functions.messages import CreateChatRequest
+from telethon.tl.functions.messages import ExportChatInviteRequest
+
 def load_fees():
     with open('config.json', 'r') as f:
         config = json.load(f)
@@ -348,6 +351,38 @@ async def handle_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML'
     )
 
+
+async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin_session():
+        await update.message.reply_text("Admin needs to login first!")
+        return
+        
+    client = TelegramClient('admin_session', API_ID, API_HASH)
+    await client.connect()
+    
+    try:
+        # Create the group
+        result = await client(CreateChatRequest(
+            users=[update.effective_user.username],
+            title="𝔽𝕃𝕌𝕏𝕏 𝔼𝕊ℂℝ𝕆𝕎 𝔾ℝ𝕆𝕌ℙ"
+        ))
+        
+        # Get the chat ID
+        chat_id = result.chats[0].id
+        
+        # Generate private invite link
+        invite = await client(ExportChatInviteRequest(
+            peer=chat_id,
+            legacy_revoke_permanent=True
+        ))
+        
+        # Send the invite link
+        await update.message.reply_text(f"Group created! Here's your private invite link:\n{invite.link}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"Error creating group: {str(e)}")
+    finally:
+        await client.disconnect()
 
 async def handle_startdeal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_id = update.effective_chat.id
