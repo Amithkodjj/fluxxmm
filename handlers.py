@@ -361,26 +361,20 @@ async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await client.connect()
     
     try:
-        # Create the group
-        result = await client(CreateChatRequest(
-            users=[update.effective_user.username],
-            title="𝔽𝕃𝕌𝕏𝕏 𝔼𝕊ℂℝ𝕆𝕎 𝔾ℝ𝕆𝕌ℙ"
-        ))
+        # Create the group and get the chat directly
+        chat = await client.create_group("My Escrower 😉", [update.effective_user.username])
         
-        # Get the chat ID
-        chat_id = result.chats[0].id
-        
-        # Generate private invite link
+        # Generate private invite link for the new chat
         invite = await client(ExportChatInviteRequest(
-            peer=chat_id,
+            peer=chat.id,
             legacy_revoke_permanent=True
         ))
         
         # Send the invite link
-        await update.message.reply_text(f"Group created! Here's your private invite link:\n{invite.link}")
+        await update.message.reply_text(f"✅ Group created successfully!\n\nJoin here: {invite.link}")
         
     except Exception as e:
-        await update.message.reply_text(f"Error creating group: {str(e)}")
+        await update.message.reply_text(f"⚠️ Creation failed: {str(e)}")
     finally:
         await client.disconnect()
 
