@@ -398,7 +398,7 @@ async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title="𝙵𝙻𝚄𝚇𝚇 𝙴𝚂𝙲𝚁𝙾𝚆 𝙶𝚁𝙾𝚄𝙿"
         ))
         
-        chat_id = result.chats[0].id
+        chat_id = result.chat.id
         
         # Generate private invite link
         invite = await client(ExportChatInviteRequest(
@@ -415,7 +415,7 @@ async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Creation failed: {str(e)}")
+        await update.message.reply_text(f"{str(e)}")
     finally:
         await client.disconnect()
 
