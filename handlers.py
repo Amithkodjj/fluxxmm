@@ -351,6 +351,37 @@ async def handle_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML'
     )
 
+async def handle_fetch(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if str(update.effective_user.id) != ADMIN_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+
+    groups_text = "<b>🔍 Bot's Group List:</b>\n\n"
+    
+    try:
+        # Get bot's updates to find groups
+        updates = await context.bot.get_updates()
+        seen_groups = set()
+        
+        for update in updates:
+            if update.message and update.message.chat:
+                chat = update.message.chat
+                if chat.type in ['group', 'supergroup'] and chat.id not in seen_groups:
+                    try:
+                        invite_link = await context.bot.export_chat_invite_link(chat.id)
+                        groups_text += f"📌 <b>{chat.title}</b>\n"
+                        groups_text += f"🔗 Link: {invite_link}\n\n"
+                        seen_groups.add(chat.id)
+                    except Exception:
+                        groups_text += f"📌 <b>{chat.title}</b>\n"
+                        groups_text += "❌ Could not generate invite link\n\n"
+                        seen_groups.add(chat.id)
+
+        await update.message.reply_text(groups_text, parse_mode='HTML')
+        
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error fetching groups: {str(e)}")
+
 
 async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin_session():
@@ -361,17 +392,27 @@ async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await client.connect()
     
     try:
-        # Create the group and get the chat directly
-        chat = await client.create_group("My Escrower 😉", [update.effective_user.username])
-        
-        # Generate private invite link for the new chat
-        invite = await client(ExportChatInviteRequest(
-            peer=chat.id,
-            legacy_revoke_permanent=True
+        # Create the group with specified title and add the user
+        result = await client(CreateChatRequest(
+            users=[update.effective_user.username],
+            title="𝙵𝙻𝚄𝚇𝚇 𝙴𝚂𝙲𝚁𝙾𝚆 𝙶𝚁𝙾𝚄𝙿"
         ))
         
-        # Send the invite link
-        await update.message.reply_text(f"✅ Group created successfully!\n\nJoin here: {invite.link}")
+        chat_id = result.chats[0].id
+        
+        # Generate private invite link
+        invite = await client(ExportChatInviteRequest(
+            peer=chat_id,
+            legacy_revoke_permanent=True,
+            expire_date=None,
+            usage_limit=None
+        ))
+        
+        await update.message.reply_text(
+            "✅ Group created successfully!\n\n"
+            f"Title: 𝙵𝙻𝚄𝚇𝚇 𝙴𝚂𝙲𝚁𝙾𝚆 𝙶𝚁𝙾𝚄𝙿\n"
+            f"Join here: {invite.link}"
+        )
         
     except Exception as e:
         await update.message.reply_text(f"⚠️ Creation failed: {str(e)}")
