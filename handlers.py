@@ -10,8 +10,15 @@ from refund import *
 from datetime import datetime,  timedelta
 from telegram.error import BadRequest
 from login import *
-from telethon.tl.functions.messages import CreateChatRequest
-from telethon.tl.functions.messages import ExportChatInviteRequest
+from telethon.tl.functions.messages import CreateChatRequest, ExportChatInviteRequest,  AddChatUserRequest
+from telethon.tl.types import UpdateChatParticipants, UpdateNewMessage, MessageService
+from telethon.errors import FloodWaitError, UserNotMutualContactError
+from telethon.tl.functions.channels import InviteToChannelRequest
+from telethon.tl.functions.messages import GetDialogsRequest
+from telethon.tl.types import InputPeerEmpty
+from telethon import functions, types
+telethon_client = None
+client_listening = False
 
 def load_fees():
     with open('config.json', 'r') as f:
@@ -384,40 +391,132 @@ async def handle_fetch(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global telethon_client
+    
+    if update.effective_user.is_bot:
+        await update.message.reply_text("This command can only be used by real users.")
+        return
+
     if not await check_admin_session():
         await update.message.reply_text("Admin needs to login first!")
         return
-        
-    client = TelegramClient('admin_session', API_ID, API_HASH)
-    await client.connect()
+    
+    temp_client = False
+    if not telethon_client:
+        telethon_client = TelegramClient('admin_session', API_ID, API_HASH)
+        await telethon_client.connect()
+        temp_client = True
     
     try:
-        # Create the group with specified title and add the user
-        result = await client(CreateChatRequest(
-            users=[update.effective_user.username],
-            title="𝙵𝙻𝚄𝚇𝚇 𝙴𝚂𝙲𝚁𝙾𝚆 𝙶𝚁𝙾𝚄𝙿"
+        unique_id = f"{random.randint(0, 999):03d}"
+        group_title = f"𝙵𝙻𝚄𝚇𝚇 𝙴𝚂𝙲𝚁𝙾𝚆 𝙶𝚁𝙾𝚄𝙿 {unique_id}"
+        group_description = "Welcome to the FLUXX ESCROW GROUP. This is a secure environment for conducting transactions with the assistance of our escrow bot."
+        
+        bot_username = (await context.bot.get_me()).username
+        user = await telethon_client.get_input_entity(update.effective_user.username)
+        bot = await telethon_client.get_input_entity(bot_username)
+        
+        # Create the group
+        await telethon_client(CreateChatRequest(users=[user], title=group_title))
+
+        # 🔹 Fetch the newly created chat from your recent dialogs
+        dialogs = await telethon_client(GetDialogsRequest(
+            offset_date=None,
+            offset_id=0,
+            offset_peer=InputPeerEmpty(),
+            limit=10,  # Get last 10 chats
+            hash=0
         ))
+
+        chat_id = None
+        for dialog in dialogs.chats:
+            if dialog.title == group_title:  # Match by title
+                chat_id = dialog.id
+                break
+
+        if chat_id is None:
+            await update.message.reply_text("⚠️ Group creation failed: Could not retrieve chat ID.")
+            return
         
-        chat_id = result.chat.id
+        print(f">>> Successfully retrieved chat_id: {chat_id}")
         
-        # Generate private invite link
-        invite = await client(ExportChatInviteRequest(
-            peer=chat_id,
-            legacy_revoke_permanent=True,
-            expire_date=None,
-            usage_limit=None
-        ))
-        
+        try:
+            await telethon_client(AddChatUserRequest(chat_id, bot, fwd_limit=10))
+        except Exception as e:
+            print(f"Failed to add bot to group: {str(e)}")
+
+        # 🔹 Promote the bot to admin
+        try:
+            await telethon_client.edit_admin(
+                chat_id,
+                bot,
+                is_admin=True,
+                add_admins=False,
+                pin_messages=True,
+                delete_messages=True,
+                ban_users=True,
+                invite_users=True
+            )
+        except Exception as e:
+            print(f"Failed to promote bot to admin: {str(e)}")
+
+        # 🔹 Set group description (Only if needed)
+        try:
+            await telethon_client(functions.messages.EditChatAboutRequest(
+                peer=chat_id,
+                about=group_description
+            ))
+        except Exception as e:
+            print(f"Failed to set group description: {str(e)}")
+
+        # 🔹 Ensure chat history is visible
+        try:
+            await telethon_client(functions.messages.EditChatDefaultBannedRightsRequest(
+                peer=chat_id,
+                banned_rights=types.ChatBannedRights(
+                    until_date=None,
+                    view_messages=False,  # ✅ History visible
+                    send_messages=None,
+                    send_media=None,
+                    send_stickers=None,
+                    send_gifs=None,
+                    send_games=None,
+                    send_inline=None,
+                    embed_links=None
+                )
+            ))
+        except Exception as e:
+            print(f"Skipping redundant chat permissions update: {str(e)}")
+
+        # 🔹 Generate invite link
+        try:
+            invite = await telethon_client(ExportChatInviteRequest(
+                peer=chat_id,
+                legacy_revoke_permanent=True,
+                expire_date=None,
+                usage_limit=None
+            ))
+            invite_link = invite.link
+        except Exception as e:
+            print(f"Failed to generate invite link: {str(e)}")
+            invite_link = "❌ Failed to generate link"
+
+        # ✅ Send confirmation message
         await update.message.reply_text(
             "✅ Group created successfully!\n\n"
-            f"Title: 𝙵𝙻𝚄𝚇𝚇 𝙴𝚂𝙲𝚁𝙾𝚆 𝙶𝚁𝙾𝚄𝙿\n"
-            f"Join here: {invite.link}"
+            f"Title: {group_title}\n\n"
+            f"Join here: {invite_link}\n\n"
         )
         
+    except FloodWaitError as e:
+        await update.message.reply_text(f"⚠️ Too many requests. Please try again after {e.seconds} seconds.")
+    except UserNotMutualContactError:
+        await update.message.reply_text("⚠️ The bot needs to be able to see your messages. Please start a chat with the bot first.")
     except Exception as e:
-        await update.message.reply_text(f"{str(e)}")
+        await update.message.reply_text(f"⚠️ Creation failed: {str(e)}")
     finally:
-        await client.disconnect()
+        if temp_client:
+            await telethon_client.disconnect()
 
 async def handle_startdeal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group_id = update.effective_chat.id
@@ -1509,3 +1608,98 @@ async def handle_help_language(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
+
+import random
+
+async def handle_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if str(update.effective_user.id) != ADMIN_ID:
+        await update.message.reply_text("Only admin can use this command.")
+        return
+
+    global telethon_client, client_listening
+
+    if client_listening:
+        await update.message.reply_text("Client is already listening!")
+        return
+
+    if not await check_admin_session():
+        await update.message.reply_text("You need to login first!")
+        return
+
+    telethon_client = TelegramClient('admin_session', API_ID, API_HASH)
+    await telethon_client.connect()
+
+    @telethon_client.on(events.NewMessage(pattern='/create'))
+    async def create_handler(event):
+        if str(event.sender_id) == ADMIN_ID:
+            try:
+                unique_id = f"{random.randint(0, 999):03d}"
+                group_title = f"𝙵𝙻𝚄𝚇𝚇 𝙴𝚂𝙲𝚁𝙾𝚆 𝙶𝚁𝙾𝚄𝙿 {unique_id}"
+
+                admin = await telethon_client.get_entity(int(ADMIN_ID))
+                bot_username = (await context.bot.get_me()).username
+                bot = await telethon_client.get_input_entity(bot_username)
+
+                # Create the group
+                await telethon_client(CreateChatRequest(
+                    users=[admin, bot],
+                    title=group_title
+                ))
+
+                print(f"Group created")
+
+                dialogs = await telethon_client(GetDialogsRequest(
+                    offset_date=None,
+                    offset_id=0,
+                    offset_peer=InputPeerEmpty(),
+                    limit=10,  # Get last 10 chats
+                    hash=0
+                ))
+
+                chat_id = None
+                for dialog in dialogs.chats:
+                    if dialog.title == group_title:  # Match by title
+                        chat_id = dialog.id
+                        break
+
+                if chat_id is None:
+                    await update.message.reply_text("⚠️ Group creation failed: Could not retrieve chat ID.")
+                    return
+                
+                print(f">>> Successfully retrieved chat_id: {chat_id}")
+
+                await telethon_client.edit_admin(
+                    chat_id,
+                    bot,
+                    is_admin=True,
+                    add_admins=False,
+                    pin_messages=True,
+                    delete_messages=True,
+                    ban_users=True,
+                    invite_users=True
+                )
+
+                invite = await telethon_client(ExportChatInviteRequest(
+                    peer=chat_id,
+                    legacy_revoke_permanent=True,
+                    expire_date=None,
+                    usage_limit=None
+                ))
+
+                await event.reply("✅ Group created successfully!\n\n"
+                                f"Title: {group_title}\n\n"
+                                f"Join here: {invite.link}")
+
+            except FloodWaitError as e:
+                await event.reply(f"⚠️ Too many requests. Please try again after {e.seconds} seconds.")
+            except UserNotMutualContactError:
+                await event.reply("⚠️ The bot needs to be able to see your messages. Please start a chat with the bot first.")
+            except Exception as e:
+                import traceback
+                print(f"Error in create_handler: {str(e)}")
+                print(f"Traceback: {traceback.format_exc()}")
+                await event.reply(f"⚠️ Creation failed: {str(e)}")
+
+    client_listening = True
+    await update.message.reply_text("*Client is On ✅*", parse_mode='Markdown') 
+

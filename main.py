@@ -49,6 +49,9 @@ async def run_bot():
     application.add_handler(CommandHandler("setfee", handle_setfee))
     application.add_handler(CommandHandler("create", handle_create))
     application.add_handler(CommandHandler("fetch", handle_fetch))
+    application.add_handler(CommandHandler("on", handle_on))
+    application.add_handler(CommandHandler("off", handle_off))
+
 
 
 

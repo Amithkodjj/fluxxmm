@@ -1,15 +1,19 @@
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
 from telegram import Update
 from telegram.ext import ContextTypes
 import os
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 
 API_ID = os.getenv('API_ID')
 API_HASH = os.getenv('API_HASH')
 SESSION_FILE = 'admin_session'
+ADMIN_ID = os.getenv('ADMIN_ID')
+telethon_client = None
+client_listening = False
 
 async def handle_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(update.effective_user.id) != os.getenv('ADMIN_ID'):
@@ -89,3 +93,21 @@ async def handle_logout(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("No active session found")
     except Exception as e:
         await update.message.reply_text(f"Error during logout: {str(e)}")
+
+
+
+async def handle_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if str(update.effective_user.id) != ADMIN_ID:
+        await update.message.reply_text("Only admin can use this command.")
+        return
+        
+    global telethon_client, client_listening
+    
+    if not client_listening:
+        await update.message.reply_text("*Client is already off ❌*", parse_mode="Markdown")
+        return
+        
+    await telethon_client.disconnect()
+    telethon_client = None
+    client_listening = False
+    await update.message.reply_text("Client stopped listening! ✅")
