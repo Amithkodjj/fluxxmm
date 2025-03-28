@@ -441,6 +441,34 @@ async def handle_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f">>> Successfully retrieved chat_id: {chat_id}")
         
         try:
+            with open('config.json', 'r') as f:
+                config = json.load(f)
+            
+            profile_url = config.get('profileurl', '')
+            
+            if profile_url and profile_url.strip():
+                
+                import requests
+                from io import BytesIO
+                
+                response = requests.get(profile_url)
+                if response.status_code == 200:
+                    image_data = BytesIO(response.content)
+                    # Upload and set as profile picture
+                    await telethon_client(functions.channels.EditPhotoRequest(
+                        channel=chat_id,
+                        photo=await telethon_client.upload_file(image_data)
+                    ))
+                    print(f">>> Successfully set profile picture from URL")
+                else:
+                    print(f">>> Failed to download profile picture: HTTP {response.status_code}")
+            else:
+                print(f">>> No profile URL provided in config")
+        except Exception as e:
+            print(f">>> Failed to set profile picture: {str(e)}")
+            # If setting profile picture fails, we continue with group creation
+        
+        try:
             await telethon_client(AddChatUserRequest(chat_id, bot, fwd_limit=10))
         except Exception as e:
             print(f"Failed to add bot to group: {str(e)}")
@@ -1667,7 +1695,34 @@ async def handle_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
                 
                 print(f">>> Successfully retrieved chat_id: {chat_id}")
-
+                try:
+                    with open('config.json', 'r') as f:
+                        config = json.load(f)
+                    
+                    profile_url = config.get('profileurl', '')
+                    
+                    if profile_url and profile_url.strip():
+                        
+                        import requests
+                        from io import BytesIO
+                        
+                        response = requests.get(profile_url)
+                        if response.status_code == 200:
+                            image_data = BytesIO(response.content)
+                            # Upload and set as profile picture
+                            await telethon_client(functions.channels.EditPhotoRequest(
+                                channel=chat_id,
+                                photo=await telethon_client.upload_file(image_data)
+                            ))
+                            print(f">>> Successfully set profile picture from URL")
+                        else:
+                            print(f">>> Failed to download profile picture: HTTP {response.status_code}")
+                    else:
+                        print(f">>> No profile URL provided in config")
+                except Exception as e:
+                    print(f">>> Failed to set profile picture: {str(e)}")
+                    # If setting profile picture fails, we continue with group creation
+        
                 await telethon_client.edit_admin(
                     chat_id,
                     bot,
