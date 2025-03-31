@@ -82,6 +82,10 @@ async def handle_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     context.user_data['awaiting_form'] = True
+    keyboard = [[InlineKeyboardButton("❌", callback_data="cancel_form")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+
     await update.message.reply_text(
         "Please enter deal details in this format:\n\n"
         "Buyer: @username\n"
@@ -95,7 +99,8 @@ async def handle_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Price: $2000```\n\n"
         '⚠ Your form data must be exactly how the instruction is given ⚠'
         '⚠ State price in dollar and ensure you include the $ sign ⚠',
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=reply_markup
     )
 
 
@@ -258,7 +263,8 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Seller: @username\n"
                 "Deal: what you're trading\n"
                 "Price: $amount</code>",
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup = reply_markup
             )
             return
             
