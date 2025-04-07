@@ -671,14 +671,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
    
     if query.data in ["buyer", "seller"]:
-        if deal_data[query.data] is not None:
-            await query.answer(f"{deal_data[query.data]} already clicked {query.data.capitalize()}", show_alert=True)
+    
+        if deal_data[query.data] is not None and deal_data[query.data] != query.from_user.id:
+            await query.answer(f"Someone else already claimed the {query.data.capitalize()} role", show_alert=True)
             return
 
-        if query.from_user.id == deal_data['buyer'] or query.from_user.id == deal_data['seller']:
-            await query.answer("You've already selected a role", show_alert=True)
-            return
-
+        # Check if user has already selected a different role
+        other_role = 'seller' if query.data == 'buyer' else 'buyer'
+        
+        # If user already has the other role, switch roles
+        if query.from_user.id == deal_data[other_role]:
+            # Clear the user's previous role
+            deal_data[other_role] = None
+            update_active_deal(deal_id, {other_role: None})
+            
+        # Assign the user to the new role
         deal_data[query.data] = query.from_user.id
         update_active_deal(deal_id, {query.data: query.from_user.id})
 
@@ -702,8 +709,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=group_id,  
                 text=(  
                     f"ℋ𝑒𝓁𝓁𝑜, <a href='tg://user?id={first_user.id}'>{first_user.first_name}</a>, the 𝑟𝑜𝑙𝑒 {second_role} has been claimed by <a href='tg://user?id={query.from_user.id}'>{query.from_user.first_name}</a>. You can now proceed with 𝑑𝑒𝑎𝑙 selection "
-                   
-               ),
+                
+            ),
                 parse_mode="HTML"
             )
             
@@ -732,6 +739,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=query.message.reply_markup,
                 parse_mode='HTML'
             )
+
 
     elif query.data in ["p2p", "b_and_s"]:
         if query.from_user.id != deal_data['buyer']:
@@ -1764,3 +1772,19 @@ async def handle_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     client_listening = True
     await update.message.reply_text("*Client is On ✅*", parse_mode='Markdown') 
 
+
+async def handle_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if str(update.effective_user.id) != ADMIN_ID:
+        await update.message.reply_text("Only admin can use this command.")
+        return
+        
+    global telethon_client, client_listening
+    
+    if not client_listening:
+        await update.message.reply_text("*Client is already off ❌*", parse_mode="Markdown")
+        return
+        
+    await telethon_client.disconnect()
+    telethon_client = None
+    client_listening = False
+    await update.message.reply_text("Client stopped listening! ✅")
