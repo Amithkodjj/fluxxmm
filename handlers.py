@@ -838,7 +838,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(deal_data['confirmations']) == 2:
             # Both confirmed, proceed to deposit
             invoice = await create_invoice(deal_data['amount'], deal_id)
-            if invoice.get("message") == "success" and invoice.get("result") == 100:
+            if invoice.get("message") == "Successful operation" and invoice.get("result") == 100:
                 payment_url = invoice["payLink"]
                 track_id = invoice["trackId"]
                 
@@ -1062,7 +1062,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fee = calculate_fee(amount, deal_type)
             total = amount + fee
             invoice = await create_invoice(total, deal_id)
-            if invoice.get("message") == "success"and invoice.get("result") == 100:
+            if invoice.get("message") == "Successful operation" and invoice.get("result") == 100:
                 payment_url = invoice["payLink"]
                 track_id = invoice["trackId"]
                 
