@@ -130,6 +130,7 @@ async def oxapay_callback(request: Request, background_tasks: BackgroundTasks):
                 text=f"🔄 Payment is being confirmed for <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>",
                 parse_mode='HTML'
             )
+        
         elif status == "Paid":
             update_active_deal(deal_id, {
                 'status': 'deposited',
@@ -146,6 +147,10 @@ async def oxapay_callback(request: Request, background_tasks: BackgroundTasks):
             amount = deal_data['amount']
             fee = calculate_fee(amount, deal_data['deal_type'])
             total = amount + fee
+            
+            # Get custom timer or default to 1 hour
+            timer_hours = deal_data.get('timer_hours', 1)
+            timer_display = f"{timer_hours} Hour{'s' if timer_hours > 1 else ''}"
 
             keyboard = [  
                 [InlineKeyboardButton("💰 Release Payment", callback_data="release_payment")],  
@@ -173,13 +178,16 @@ async def oxapay_callback(request: Request, background_tasks: BackgroundTasks):
                     f"<b>👥 Participants:</b>\n"
                     f"🔹 <b>Buyer:</b> <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
                     f"🔹 <b>Seller:</b> <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n"
-                    f"<b>⏱ Time Remaining to Complete Trade: 60:00 Minutes</b> \n"
+                    f"<b>⏱ Selected Timer Duration: {timer_display}</b>\n"
+                    f"<b>⏱ Time Remaining to Complete Trade: {timer_display}</b>\n"
                     f"⚠️ <i>Please complete the trade before the timer expires, or a moderator will be involved automatically.</i>"
                 ),
                 reply_markup=reply_markup,
                 parse_mode='HTML'
             )
             background_tasks.add_task(check_payment_timeout, bot, group_id, deal_id, sent_message.message_id)
+
+                
         elif status == "Expired":
             await bot.send_message(
                 chat_id=group_id,
@@ -216,44 +224,43 @@ async def withdraw_callback(request: Request):
     return {"message": "ok"}
 
 async def check_payment_timeout(bot, group_id, deal_id, message_id):
-    await asyncio.sleep(3600)  # 60 minutes in seconds
-    
     deal_data = get_active_deal(deal_id)
-    if not deal_data or deal_data['status'] != 'deposited':
+    if not deal_data:
         return
+    
+    # Use custom timer or default to 1 hour
+    timer_hours = deal_data.get('timer_hours', 1)
+    await asyncio.sleep(timer_hours * 3600)  # Convert hours to seconds
+    
+    # Check if deal is still active
+    current_deal = get_active_deal(deal_id)
+    if not current_deal or current_deal.get('status') != 'deposited':
+        return
+    
+    # Auto-involve moderator
+    try:
+        await bot.edit_message_text(
+            chat_id=group_id,
+            message_id=message_id,
+            text=f"⚠️ <b>TIMER EXPIRED - MODERATOR INVOLVED</b>\n\n"
+                 f"The {timer_hours}-hour timer has expired.\n"
+                 f"A moderator has been automatically notified.\n\n"
+                 f"Deal ID: <code>{deal_id}</code>",
+            parse_mode='HTML'
+        )
         
-    buyer = await bot.get_chat(deal_data['buyer'])
-    seller = await bot.get_chat(deal_data['seller'])
-    
-    group_alert = (
-        "⚠️ <b>Payment Release Timeout</b>\n\n"
-        "60 minutes have passed without payment release.\n"
-        "A moderator has been automatically involved to assist.\n\n"
-        f"Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
-        f"Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>"
-    )
-    
-    await bot.send_message(
-        chat_id=group_id,
-        text=group_alert,
-        parse_mode='HTML'
-    )
-    
-    mod_alert = (
-        "<b>⚠️ Payment Release Timeout Alert</b>\n\n"
-        f"Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
-        f"Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n"
-        f"Amount: ${deal_data['amount']:.2f}\n"
-        f"Deal Type: {DEAL_TYPE_DISPLAY.get(deal_data['deal_type'], deal_data['deal_type'])}\n\n"
-        f"<a href='https://t.me/c/{str(group_id)[4:]}/{message_id}'>View Deal Message</a>\n\n"
-        "Please review this case immediately."
-    )
-    
-    await bot.send_message(
-        chat_id=ADMIN_ID,
-        text=mod_alert,
-        parse_mode='HTML'
-    )
+        # Notify admin
+        await bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"🚨 <b>AUTO-ESCALATION</b>\n\n"
+                 f"Deal ID: <code>{deal_id}</code>\n"
+                 f"Timer: {timer_hours} hours expired\n"
+                 f"Group: {group_id}\n"
+                 f"Status: Requires moderator intervention",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        print(f"Error in timeout handler: {e}")
 
 if __name__ == "__main__":
     import uvicorn

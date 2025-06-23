@@ -753,6 +753,53 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         seller = await context.bot.get_chat(deal_data['seller'])
         
         keyboard = [
+            [InlineKeyboardButton("⏰ 1 Hour", callback_data="timer_1"),
+            InlineKeyboardButton("⏰ 2 Hours", callback_data="timer_2")],
+            [InlineKeyboardButton("⏰ 3 Hours", callback_data="timer_3"),
+            InlineKeyboardButton("⏰ 4 Hours", callback_data="timer_4")],
+            [InlineKeyboardButton("⏰ 5 Hours", callback_data="timer_5"),
+            InlineKeyboardButton("⏰ Skip (Default 1h)", callback_data="timer_default")],
+            [InlineKeyboardButton("❌ Cancel Deal", callback_data="back")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"<b>𝗙𝗟𝗨𝗫𝗫 𝗘𝗦𝗖𝗥𝗢𝗪 𝗦𝗘𝗥𝗩𝗜𝗖𝗘</b>\n\n"
+            f"👤 Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
+            f"👥 Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n\n"
+            f"🔵 Deal Type: <b>{deal_type_display}</b>\n\n"
+            f"⏰ <b>Select Timer Duration</b>\n"
+            f"• How long should the deal remain active?\n"
+            f"• After this time, a moderator will be automatically involved\n"
+            f"• Choose based on your transaction complexity\n"
+            f"• Default is 1 hour for quick deals\n\n"
+            f"<i>Please select your preferred timer...</i>",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+
+    elif query.data.startswith("timer_"):
+        if query.from_user.id != deal_data['buyer']:
+            await query.answer("Only the buyer can select the timer", show_alert=True)
+            return
+        
+        timer_value = query.data.split("_")[1]
+        
+        if timer_value == "default":
+            timer_hours = 1
+            timer_display = "1 Hour (Default)"
+        else:
+            timer_hours = int(timer_value)
+            timer_display = f"{timer_hours} Hour{'s' if timer_hours > 1 else ''}"
+        
+        # Save timer to deal data
+        deal_data["timer_hours"] = timer_hours
+        update_active_deal(deal_id, {"timer_hours": timer_hours})
+        
+        buyer = await context.bot.get_chat(deal_data['buyer'])
+        seller = await context.bot.get_chat(deal_data['seller'])
+        
+        keyboard = [
             [InlineKeyboardButton("❌ Cancel Deal", callback_data="back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -761,24 +808,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>𝗙𝗟𝗨𝗫𝗫 𝗘𝗦𝗖𝗥𝗢𝗪 𝗦𝗘𝗥𝗩𝗜𝗖𝗘</b>\n\n"
             f"👤 Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
             f"👥 Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n\n"
-            f"🔵 Deal Type: <b>{deal_type_display}</b>\n\n"
+            f"🔵 Deal Type: <b>{deal_data['deal_type'].replace('_', ' ').title()}</b>\n"
+            f"⏰ Timer: <b>{timer_display}</b>\n\n"
             f"💰 <b>Enter Deposit Amount</b>\n"
             f"• Only numbers (e.g. 100 or 100.50)\n"
             f"• Minimum amount: $1\n"
             f"• Maximum amount: $100,000\n"
-            f"• Admin fee: 5% of transaction amount\n"
-            f"• Purpose: Secure escrow service for safe trading\n"
+            f"• Admin fee will likely be included in transaction\n"
             f"• Your funds will be held safely until transaction is complete\n"
-            f"• Instant release upon mutual confirmation\n\n"
+            f"• Auto-moderator involvement after {timer_display.lower()}\n\n"
             f"<i>Waiting for buyer to enter amount...</i>",
             reply_markup=reply_markup,
             parse_mode='HTML'
         )        
         context.user_data["state"] = "AMOUNT"  
-        context.user_data["deal_type"] = query.data  
+        context.user_data["deal_type"] = deal_data['deal_type']
         context.user_data["prompt_message_id"] = msg.message_id
-
-
     elif query.data == "help":
         keyboard = [
             [InlineKeyboardButton("English 🇬🇧", callback_data="help_en"),
@@ -970,7 +1015,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         deal_data = get_active_deal(deal_id)
-        remaining_time = get_remaining_time(deal_data.get('payment_time'))
+        
+        # Get custom timer or default to 1 hour
+        timer_hours = deal_data.get('timer_hours', 1)
+        timer_minutes = timer_hours * 60
+        
+        remaining_time = get_remaining_time(deal_data.get('payment_time'), timer_minutes)
         
         buyer = await context.bot.get_chat(deal_data['buyer'])
         seller = await context.bot.get_chat(deal_data['seller'])
@@ -986,6 +1036,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🚫 End Deal", callback_data="back")]  
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Display timer in hours and minutes format
+        timer_display = f"{timer_hours} Hour{'s' if timer_hours > 1 else ''}"
         
         await query.edit_message_text(
             f"<b>⚠️ FLUXX ESCROW BOT - PAYMENT CONFIRMED ✅</b>\n\n"
@@ -1003,7 +1056,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>👥 Participants:</b>\n"
             f"🔹 <b>Buyer:</b> <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
             f"🔹 <b>Seller:</b> <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n"
-            f"<b>⏱ Time Remaining to Complete Trade: {remaining_time} Minutes</b> \n"
+            f"<b>⏱ Selected Timer Duration: {timer_display}</b>\n"
+            f"<b>⏱ Time Remaining to Complete Trade: {remaining_time}</b>\n"
             f"⚠️ <i>Please complete the trade before the timer expires, or a moderator will be involved automatically.</i>",
             reply_markup=reply_markup,
             parse_mode='HTML'
@@ -1011,19 +1065,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
-def get_remaining_time(payment_time):
+def get_remaining_time(payment_time, timer_minutes=60):
     if not payment_time:
         return "00:00"
     payment_datetime = datetime.fromisoformat(payment_time)
-    time_limit = payment_datetime + timedelta(minutes=60)
+    time_limit = payment_datetime + timedelta(minutes=timer_minutes)
     remaining = time_limit - datetime.now()
     
     if remaining.total_seconds() <= 0:
         return "00:00"
         
-    minutes = int(remaining.total_seconds() // 60)
+    total_minutes = int(remaining.total_seconds() // 60)
     seconds = int(remaining.total_seconds() % 60)
-    return f"{minutes:02d}:{seconds:02d}"
+    
+    # Format as HH:MM if over 60 minutes, otherwise MM:SS
+    if total_minutes >= 60:
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        return f"{hours:02d}:{minutes:02d}:00"
+    else:
+        return f"{total_minutes:02d}:{seconds:02d}"
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("state") == "AMOUNT":
