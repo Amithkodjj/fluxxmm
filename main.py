@@ -16,16 +16,13 @@ import httpx
 import time
 from fastapi.responses import PlainTextResponse
 from login import *
+from config import DEAL_TYPE_DISPLAY
 
 app = FastAPI()
 
 # Initialize bot
 bot = Application.builder().token(TOKEN).build().bot
 
-DEAL_TYPE_DISPLAY = {
-    'b_and_s': 'Buy and Sell',
-    'p2p': 'P2P Transfer'
-}
 
 async def error_handler(update, context):
     print(f"Error occurred: {context.error}")
@@ -34,12 +31,12 @@ async def run_bot():
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", handle_start))
-    application.add_handler(CommandHandler("startdeal", handle_startdeal))
+    application.add_handler(CommandHandler("sdeal", handle_startdeal))
     application.add_handler(CommandHandler("p2pfee", handle_p2pfee))
     application.add_handler(CommandHandler("bsfee", handle_bsfee))
     application.add_handler(CommandHandler("trades", handle_trades))
-    application.add_handler(CommandHandler("killdeal", handle_killdeal))
-    application.add_handler(CommandHandler("killall", handle_killall))
+    application.add_handler(CommandHandler("enddeal", handle_killdeal))
+    application.add_handler(CommandHandler("endall", handle_killall))
     application.add_handler(CommandHandler("setsticker", handle_setsticker))
     application.add_handler(CommandHandler("getdeal", handle_getdeal))
     application.add_handler(CommandHandler("refund", handle_refund))

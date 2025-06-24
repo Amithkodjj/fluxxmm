@@ -10,3 +10,8 @@ OXAPAY_PAYOUT_KEY = os.getenv("OXAPAY_PAYOUT_KEY")
 P2P_FEE = 0.025  
 BS_FEE = 0.03   
 
+DEAL_TYPE_DISPLAY = {
+    'b_and_s': 'Buy and Sell',
+    'p2p': 'P2P Transfer'
+    
+}

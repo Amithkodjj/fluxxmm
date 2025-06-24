@@ -4,6 +4,7 @@ import json
 from config import *
 from utils import *
 from withdrawal import *
+import re  
 from deposit import *
 from datetime import datetime
 from refund import *
@@ -11,11 +12,10 @@ from datetime import datetime,  timedelta
 from telegram.error import BadRequest
 from login import *
 from telethon.tl.functions.messages import CreateChatRequest, ExportChatInviteRequest,  AddChatUserRequest
-from telethon.tl.types import UpdateChatParticipants, UpdateNewMessage, MessageService
 from telethon.errors import FloodWaitError, UserNotMutualContactError
-from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import GetDialogsRequest
 from telethon.tl.types import InputPeerEmpty
+from config import DEAL_TYPE_DISPLAY
 from telethon import functions, types
 telethon_client = None
 client_listening = False
@@ -91,17 +91,65 @@ async def handle_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Buyer: @username\n"
         "Seller: @username\n"
         "Deal: What you're dealing\n"
-        "Price: $amount\n\n"
+        "Price: $amount\n"
+        "Time: duration (optional)\n\n"
         "```Example:\n\n"
         "Buyer: @buyer\n"
         "Seller: @seller\n"
         "Deal: Selling ps4\n"
+        "Price: $2000\n"
+        "Time: 2 hours```\n\n"
+        "```Example without time:\n\n"
+        "Buyer: @buyer\n"
+        "Seller: @seller\n"
+        "Deal: Selling ps4\n"
         "Price: $2000```\n\n"
-        '⚠ Your form data must be exactly how the instruction is given ⚠'
-        '⚠ State price in dollar and ensure you include the $ sign ⚠',
+        '⚠ Your form data must be exactly how the instruction is given ⚠\n'
+        '⚠ State price in dollar and ensure you include the $ sign ⚠\n'
+        '⚠ Time formats: "2 hours", "1 hr", "3 h", "30 minutes" (1 - 24 hours only) ⚠\n'
+        '⚠ If no time specified, default 1 hour will be used ⚠',
         parse_mode="Markdown",
         reply_markup=reply_markup
     )
+
+def parse_time_duration(time_text):
+    """Parse time duration from text and return hours as integer"""
+    time_text = time_text.lower().strip()
+    
+    # Remove common words
+    time_text = time_text.replace('time:', '').strip()
+    
+    # Parse different formats
+    import re
+    
+    # Match patterns like "2 hours", "1 hr", "3 h", "30 minutes", "1.5 hours"
+    hour_patterns = [
+        r'(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b',
+        r'(\d+(?:\.\d+)?)\s*(?:hour|hr)\b'
+    ]
+    
+    minute_patterns = [
+        r'(\d+)\s*(?:minutes?|mins?|m)\b'
+    ]
+    
+    # Try hour patterns first
+    for pattern in hour_patterns:
+        match = re.search(pattern, time_text)
+        if match:
+            hours = float(match.group(1))
+            if 1 <= hours <= 24:
+                return int(hours) if hours == int(hours) else hours
+    
+    # Try minute patterns
+    for pattern in minute_patterns:
+        match = re.search(pattern, time_text)
+        if match:
+            minutes = int(match.group(1))
+            hours = minutes / 60
+            if 1 <= hours <= 24:
+                return max(1, int(hours))  
+    
+    return None
 
 
 from telethon import TelegramClient
@@ -245,6 +293,22 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "Price: 100.50"
                     )
                     return
+            elif line.lower().startswith('time:'):
+                time_text = line.split(':', 1)[1].strip()
+                parsed_time = parse_time_duration(time_text)
+                if parsed_time:
+                    form_data['timer_hours'] = parsed_time
+                    print(f">>> Added timer_hours: {parsed_time}")
+                else:
+                    await update.message.reply_text(
+                        "💡 Invalid time format. Use:\n"
+                        "Time: 2 hours\n"
+                        "Time: 1 hr\n"
+                        "Time: 3 h\n"
+                        "Time: 30 minutes\n\n"
+                        "Valid range: 1 - 24 hours"
+                    )
+                    return
         
         print(f">>> Form data collected: {form_data}")
         required_fields = ['buyer_id', 'buyer_name', 'seller_id', 'seller_name', 'deal_type', 'amount']
@@ -262,7 +326,8 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "<code>Buyer: @username\n"
                 "Seller: @username\n"
                 "Deal: what you're trading\n"
-                "Price: $amount</code>",
+                "Price: $amount</code>"
+                "Time: duration (optional)</code>",
                 parse_mode='HTML',
                 reply_markup = reply_markup
             )
@@ -270,6 +335,8 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         deal_id = generate_deal_id(form_data['buyer_id'], None, update.effective_chat.id)
         print(f">>> Generated deal_id: {deal_id}")
+
+        timer_hours = form_data.get('timer_hours', 1)
         
         deal_data = {
             "status": "initiated",
@@ -279,6 +346,7 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "seller": form_data['seller_id'],
             "amount": form_data['amount'],
             "deal_type": form_data['deal_type'],
+            "timer_hours": timer_hours,
             "timestamp": datetime.now().isoformat()
         }
         
@@ -290,13 +358,16 @@ async def process_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("End Deal ❌", callback_data=f"back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
+        timer_display = f"{timer_hours} Hour{'s' if timer_hours != 1 else ''}"
+
         await update.message.reply_text(
             f"<b>𝗙𝗟𝗨𝗫𝗫 𝗘𝗦𝗖𝗥𝗢𝗪 𝗦𝗘𝗥𝗩𝗜𝗖𝗘</b>\n\n"
             f"👤 Buyer: <a href='tg://user?id={form_data['buyer_id']}'>{form_data['buyer_name']}</a>\n"
             f"👥 Seller: <a href='tg://user?id={form_data['seller_id']}'>{form_data['seller_name']}</a>\n"
             f"🔵 Deal: {form_data['deal_type']}\n"
             f"💰 Amount: ${form_data['amount']:.2f}\n\n"
+            f"⏰ Timer: {timer_display}\n\n"
             f"<i>Both buyer and seller must confirm to proceed</i>",
             reply_markup=reply_markup,
             parse_mode='HTML'
@@ -746,20 +817,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("Only the buyer can select the deal type", show_alert=True)
             return
 
-        deal_type_display = "P2P Trade" if query.data == "p2p" else "Buy & Sell"
+        deal_type_display = DEAL_TYPE_DISPLAY.get(query.data, query.data)
         deal_data["deal_type"] = query.data
         update_active_deal(deal_id, {"deal_type": query.data})
         buyer = await context.bot.get_chat(deal_data['buyer'])
         seller = await context.bot.get_chat(deal_data['seller'])
         
         keyboard = [
-            [InlineKeyboardButton("⏰ 1 Hour", callback_data="timer_1"),
-            InlineKeyboardButton("⏰ 2 Hours", callback_data="timer_2")],
-            [InlineKeyboardButton("⏰ 3 Hours", callback_data="timer_3"),
-            InlineKeyboardButton("⏰ 4 Hours", callback_data="timer_4")],
-            [InlineKeyboardButton("⏰ 5 Hours", callback_data="timer_5"),
-            InlineKeyboardButton("⏰ Skip (Default 1h)", callback_data="timer_default")],
-            [InlineKeyboardButton("❌ Cancel Deal", callback_data="back")]
+            [InlineKeyboardButton("1 Hour", callback_data="timer_1"),
+            InlineKeyboardButton("2 Hours", callback_data="timer_2")],
+            [InlineKeyboardButton("3 Hours", callback_data="timer_3"),
+            InlineKeyboardButton("4 Hours", callback_data="timer_4")],
+            [InlineKeyboardButton("5 Hours", callback_data="timer_5"),
+            InlineKeyboardButton("Skip (Default 1h)", callback_data="timer_default")],
+            [InlineKeyboardButton("❌", callback_data="back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -798,6 +869,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         buyer = await context.bot.get_chat(deal_data['buyer'])
         seller = await context.bot.get_chat(deal_data['seller'])
+        deal_type_display = DEAL_TYPE_DISPLAY.get(query.data, query.data)
         
         keyboard = [
             [InlineKeyboardButton("❌ Cancel Deal", callback_data="back")]
@@ -808,7 +880,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>𝗙𝗟𝗨𝗫𝗫 𝗘𝗦𝗖𝗥𝗢𝗪 𝗦𝗘𝗥𝗩𝗜𝗖𝗘</b>\n\n"
             f"👤 Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
             f"👥 Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n\n"
-            f"🔵 Deal Type: <b>{deal_data['deal_type'].replace('_', ' ').title()}</b>\n"
+            f"🔵 Deal Type: <b>{deal_type_display}</b>\n"
             f"⏰ Timer: <b>{timer_display}</b>\n\n"
             f"💰 <b>Enter Deposit Amount</b>\n"
             f"• Only numbers (e.g. 100 or 100.50)\n"
