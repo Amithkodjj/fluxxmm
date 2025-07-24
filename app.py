@@ -19,6 +19,7 @@ DEAL_TYPE_DISPLAY = {
 bot = Application.builder().token(TOKEN).build().bot
 
 app = Quart(__name__)
+
 @app.route('/')
 async def home():
     return "Welcome to the Quart App!"
@@ -30,9 +31,8 @@ async def webhook():
 @app.route("/oxapay_callback", methods=["POST"])
 async def oxapay_callback():
     try:
-        # Parse the incoming data
         if not request.headers.get('sign'):
-            print("✅ No signature provided - processing callback anyway")
+            print("No signature provided - processing callback anyway")
             data = await request.get_json()
         else:
             signature = request.headers.get('sign')
@@ -44,10 +44,10 @@ async def oxapay_callback():
             ).hexdigest()
 
             if signature != calculated_signature:
-                print("❌ Invalid signature detected")
+                print("Invalid signature detected")
                 return "Invalid signature", 400
 
-            print("✅ Signature verified")
+            print("Signature verified")
             data = await request.get_json()
         print(f"Callback Data Received: {data}")
 
@@ -62,23 +62,27 @@ async def oxapay_callback():
             print(f"No active deal found for deal_id: {deal_id}")
             return "", 200
 
-        # Fetch buyer and seller information
         buyer = await bot.get_chat(deal_data['buyer'])
         seller = await bot.get_chat(deal_data['seller'])
 
-        # Process the status
         status = data.get("status")
         if status == "Waiting":
             await bot.send_message(
                 chat_id=group_id,
-                text=f"💳 Payment initiated by <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\nWaiting for deposit...",
+                text="""<blockquote>💳 <b>Payment Initiated</b>
+                
+Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>
+Status: Awaiting deposit confirmation</blockquote>""",
                 parse_mode='HTML'
             )
 
         elif status == "Confirming":
             await bot.send_message(
                 chat_id=group_id,
-                text=f"🔄 Payment is being confirmed for <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>",
+                text="""<blockquote>🔄 <b>Payment Confirmation in Progress</b>
+
+Transaction is being verified by the payment network
+Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a></blockquote>""",
                 parse_mode='HTML'
             )
 
@@ -103,40 +107,44 @@ async def oxapay_callback():
             keyboard = [  
                 [InlineKeyboardButton("💰 Release Payment", callback_data="release_payment")],  
                 [InlineKeyboardButton("⏳ Check Timer", callback_data="check_timer")],  
-                [InlineKeyboardButton("👨‍💼 Involve Moderator", callback_data="mod")],  
-                [InlineKeyboardButton("🚫 End Deal", callback_data="back")]  
+                [InlineKeyboardButton("🛡 Involve Moderator", callback_data="mod")],  
+                [InlineKeyboardButton("❌ Cancel Deal", callback_data="back")]  
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             sent_message = await bot.send_message(
                 chat_id=group_id,
-                text=(
-                    f"<b>⚠️ FLUXX ESCROW BOT - PAYMENT CONFIRMED ✅</b>\n\n"
-                    f"💵 <b>Deposit Amount:</b> ${amount:.2f}\n"
-                    f"✅ <b>Payment confirmed from:</b> <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
-                    f"🔄 <b>Escrow Fee:</b> ${fee:.2f}\n"
-                    f"💰 <b>Total Amount:</b> ${total:.2f}\n\n"
-                    f"<b>⚠️ IMPORTANT INSTRUCTIONS:</b>\n"
-                    f"1. Ensure the transaction is fully completed before proceeding.\n"
-                    f"2. <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a> Verify that all items/services meet your expectations.\n"
-                    f"3. <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a> Only click 'Release Payment' if fully satisfied with the transaction.\n"
-                    f"4. If you encounter any issues, click 'Involve Moderator' immediately.\n\n"
-                    f"<b>🚫 Do NOT release payment before deal completion to avoid disputes.</b>\n"
-                    f"❗ All disputes or suspected scams will be investigated thoroughly.\n\n"
-                    f"<b>👥 Participants:</b>\n"
-                    f"🔹 <b>Buyer:</b> <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
-                    f"🔹 <b>Seller:</b> <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n"
-                    f"<b>⏱ Time Remaining to Complete Trade: 60:00 Minutes</b> \n"
-                    f"⚠️ <i>Please complete the trade before the timer expires, or a moderator will be involved automatically.</i>"
-                ),
+                text=f"""<blockquote>🛡 <b>Escrow Payment Confirmed</b> ✅
+
+<b>Transaction Details</b>
+▸ Amount: ${amount:.2f}
+▸ Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>
+▸ Service Fee: ${fee:.2f}
+▸ Total: ${total:.2f}
+
+<b>Important Instructions</b>
+1. Complete all transaction requirements before releasing funds
+2. Buyer must verify goods/services before payment release
+3. Contact moderator immediately for any disputes
+
+<b>Participants</b>
+▸ Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>
+▸ Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>
+
+⏱ <b>Time Remaining:</b> 60:00 minutes
+⚠️ Moderator will auto-intervene if timer expires</blockquote>""",
                 reply_markup=reply_markup,
                 parse_mode='HTML'
             )
             asyncio.create_task(check_payment_timeout(bot, group_id, deal_id, sent_message.message_id))
+            
         elif status == "Expired":
             await bot.send_message(
                 chat_id=group_id,
-                text=f"⚠️ Payment time expired for <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>",
+                text=f"""<blockquote>⚠️ <b>Payment Expired</b>
+
+The payment window has closed for this transaction
+Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a></blockquote>""",
                 parse_mode='HTML'
             )
             remove_active_deal(deal_id)
@@ -150,11 +158,9 @@ async def oxapay_callback():
 @app.route("/withdraw", methods=["POST"])
 async def withdraw_callback():
     try:
-        # Parse the incoming data
         data = await request.get_json()
         print(f"Withdrawal Callback Data Received: {data}")
 
-        # Extract the necessary information
         description = data.get("description", "")
         seller_id = description.split()[-1]
 
@@ -162,7 +168,6 @@ async def withdraw_callback():
         amount = data.get("amount")
         currency = data.get("currency")
 
-        # Send update to seller
         await send_withdrawal_update_to_seller(bot, seller_id, status, amount, currency)
 
     except Exception as e:
@@ -172,9 +177,7 @@ async def withdraw_callback():
     return "ok", 200
 
 async def check_payment_timeout(bot, group_id, deal_id, message_id):
-    """Check if payment has been released within 60 minutes"""
-    
-    await asyncio.sleep(3600)  # 60 minutes in seconds
+    await asyncio.sleep(3600)
     
     deal_data = get_active_deal(deal_id)
     if not deal_data or deal_data['status'] != 'deposited':
@@ -183,35 +186,31 @@ async def check_payment_timeout(bot, group_id, deal_id, message_id):
     buyer = await bot.get_chat(deal_data['buyer'])
     seller = await bot.get_chat(deal_data['seller'])
     
-    # Alert group members
-    group_alert = (
-        "⚠️ <b>Payment Release Timeout</b>\n\n"
-        "60 minutes have passed without payment release.\n"
-        "A moderator has been automatically involved to assist.\n\n"
-        f"Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
-        f"Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>"
-    )
-    
     await bot.send_message(
         chat_id=group_id,
-        text=group_alert,
+        text="""<blockquote>⚠️ <b>Payment Release Timeout</b>
+
+60 minutes have passed without payment release
+A moderator has been automatically notified
+
+<b>Participants</b>
+▸ Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>
+▸ Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a></blockquote>""",
         parse_mode='HTML'
-    )
-    
-    # Alert moderator
-    mod_alert = (
-        "<b>⚠️ Payment Release Timeout Alert</b>\n\n"
-        f"Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>\n"
-        f"Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>\n"
-        f"Amount: ${deal_data['amount']:.2f}\n"
-        f"Deal Type: {DEAL_TYPE_DISPLAY.get(deal_data['deal_type'], deal_data['deal_type'])}\n\n"
-        f"<a href='https://t.me/c/{str(group_id)[4:]}/{message_id}'>View Deal Message</a>\n\n"
-        "Please review this case immediately."
     )
     
     await bot.send_message(
         chat_id=ADMIN_ID,
-        text=mod_alert,
+        text=f"""<blockquote>🛑 <b>Moderator Alert: Payment Timeout</b>
+
+<b>Transaction Details</b>
+▸ Amount: ${deal_data['amount']:.2f}
+▸ Buyer: <a href='tg://user?id={deal_data['buyer']}'>{buyer.first_name}</a>
+▸ Seller: <a href='tg://user?id={deal_data['seller']}'>{seller.first_name}</a>
+▸ Deal Type: {DEAL_TYPE_DISPLAY.get(deal_data['deal_type'], deal_data['deal_type'])}
+
+<a href='https://t.me/c/{str(group_id)[4:]}/{message_id}'>View Transaction</a>
+
+Please review this case immediately</blockquote>""",
         parse_mode='HTML'
     )
-
